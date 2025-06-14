@@ -1,0 +1,387 @@
+<!DOCTYPE html> 
+<html lang="en"> 
+<head> 
+    <meta charset="UTF-8"> 
+    <meta name="viewport" content="width=device-width, initial-scale=1.0"> 
+    <title>Modern Stopwatch with Productivity Tracker</title> 
+    <script src="https://cdn.tailwindcss.com"></script> 
+    <style> 
+        /* Keyframes for animations */
+        @keyframes pulse { 
+            0% { transform: scale(1); } 
+            50% { transform: scale(1.03); } 
+            100% { transform: scale(1); } 
+        } 
+        @keyframes gaugeFill { 
+            0% { stroke-dasharray: 0 314; } 
+        } 
+
+        /* Neumorphic base style */
+        .neumorphic { 
+            background: linear-gradient(145deg, #2d3748, #1a202c); 
+            box-shadow: 5px 5px 10px #1a202c, -5px -5px 10px #2d3748; 
+            transition: all 0.3s ease; 
+        } 
+        .neumorphic:hover { 
+            box-shadow: inset 2px 2px 5px #1a202c, inset -2px -2px 5px #2d3748; 
+        } 
+
+        /* Pulse animation for active elements */
+        .pulse-animation { 
+            animation: pulse 2s infinite; 
+        } 
+
+        /* Gradient background for the body - Now a dark grey */
+        .gradient-bg { 
+            background: linear-gradient(135deg, #1f2937 0%, #0f172a 100%); /* Darker grey to very dark blue-grey */
+        } 
+
+        /* Circular gauge for productivity (remains the same) */
+        .circular-gauge { 
+            transform: rotate(-90deg); 
+        } 
+        .gauge-progress { 
+            stroke: #10b981; 
+            stroke-dasharray: 0 314; 
+            transition: stroke-dasharray 0.5s ease; 
+        } 
+
+        /* Custom styles for the main control button */
+        .large-centered-button {
+            width: 100%; 
+            max-width: 200px; 
+            margin: 0 auto; 
+            font-size: 1.25rem; 
+            padding: 0.8rem 2rem; 
+        }
+
+        /* Styling for the small break time display */
+        #currentBreakTimeDisplay {
+            font-size: 0.9rem;
+            color: #a0aec0; 
+            margin-bottom: 0.5rem; 
+            text-align: center;
+            width: 100%; 
+        }
+        #currentBreakTimeDisplay.on-break {
+            color: #facc15; 
+            font-weight: 600;
+        }
+        #currentBreakTimeDisplay.working {
+            color: #4ade80; 
+            font-weight: 600;
+        }
+
+        /* Progress bar specific styles */
+        #progressBarContainer {
+            background-color: #374151; /* Darker gray background for the bar */
+            height: 24px; /* Height of the progress bar */
+            border-radius: 12px; /* Rounded corners for the bar */
+            overflow: hidden; /* Ensure progress doesn't spill out */
+            position: relative;
+            box-shadow: inset 1px 1px 3px #1a202c, inset -1px -1px 3px #444E5B; /* Neumorphic inset shadow */
+        }
+        #progressBar {
+            background-color: #10b981; /* Green progress color */
+            height: 100%;
+            width: 0%; /* Initial width */
+            border-radius: 12px;
+            transition: width 0.5s ease-out, background-color 0.3s ease; /* Smooth transition for width and color */
+        }
+        #progressBarText {
+            color: #e2e8f0; /* Text color for percentage */
+            font-size: 0.9rem;
+            font-weight: 700;
+            text-shadow: 0 1px 2px rgba(0,0,0,0.5); /* Text shadow for readability */
+        }
+        /* Progress bar color based on productivity */
+        #progressBar.low { background-color: #ef4444; } /* Red for low */
+        #progressBar.medium { background-color: #f59e0b; } /* Amber for medium */
+
+        /* Specific styling for the Reset button to decrease its size */
+        #resetBtn {
+            padding: 0.6rem 1.2rem; /* Reduced padding */
+            font-size: 0.85rem; /* Smaller font size */
+            /* Tailwind's w-1/2 will still make it take half width,
+               but the internal padding and font will make text smaller */
+        }
+
+        /* Header text gradient - Still neon blue/cyan */
+        .header-gradient-text {
+            background-clip: text;
+            -webkit-background-clip: text;
+            color: transparent;
+            background-image: linear-gradient(to right, #00FFFF, #00CED1); /* Cyan to Dark Turquoise */
+        }
+    </style> 
+</head> 
+<body class="gradient-bg text-white font-sans min-h-screen flex items-center justify-center"> 
+    <div class="container mx-auto p-6 max-w-lg"> 
+        <!-- Stopwatch Section --> 
+        <div class="neumorphic rounded-2xl p-8 mb-8"> 
+            <h1 class="text-3xl font-extrabold text-center mb-6 header-gradient-text">Stopwatch</h1> 
+            <div id="stopwatch" class="text-5xl font-mono text-center mb-6 tracking-tight">00:00:00.0</div> 
+            <div class="flex flex-col items-center gap-4 mb-6"> 
+                <!-- Small break time display -->
+                <p id="currentBreakTimeDisplay" class="text-sm text-gray-400">Break: 0m 0s</p>
+                <button id="startPauseBtn" class="neumorphic bg-green-500 hover:bg-green-600 text-white font-bold rounded-full transition large-centered-button">Start</button>
+                <div class="flex justify-center gap-4 w-full"> 
+                    <button id="resetBtn" class="neumorphic bg-red-500 hover:bg-red-600 text-white font-bold rounded-full transition w-1/2">Reset</button>
+                    <!-- Removed Mark button, no replacement -->
+                </div>
+            </div>
+            
+            <!-- Replaced laps with progress bar -->
+            <div id="progressBarContainer" class="w-full bg-gray-800 rounded-full h-6 mb-2 relative overflow-hidden">
+                <div id="progressBar" class="h-full bg-green-500 rounded-full transition-all duration-500 ease-out" style="width:0%;"></div>
+                <span id="progressBarText" class="absolute inset-0 flex items-center justify-center text-xs font-bold">0% Productivity</span>
+            </div>
+            <p class="text-xs text-gray-400 text-center">Productivity progress</p>
+
+        </div> 
+
+        <!-- Productivity Calculator Section --> 
+        <div class="neumorphic rounded-2xl p-8"> 
+            <h2 class="text-2xl font-extrabold text-center mb-6 header-gradient-text">Productivity Tracker</h2> 
+            <div class="flex justify-between items-center mb-6"> 
+                <div> 
+                    <p class="text-lg">Active Time: <span id="activeTime" class="font-semibold">0m 0s</span></p> 
+                    <p class="text-lg">Break Time: <span id="breakTime" class="font-semibold">0m 0s</span></p> 
+                    <p class="text-lg">Total Time: <span id="totalTime" class="font-semibold">0m 0s</span></p> 
+                </div> 
+                <div class="relative w-24 h-24"> 
+                    <svg class="circular-gauge" width="100" height="100"> 
+                        <circle cx="50" cy="50" r="45" stroke="#374151" stroke-width="10" fill="none"/> 
+                        <circle id="gaugeProgress" class="gauge-progress" cx="50" cy="50" r="45" stroke-width="10" fill="none"/> 
+                    </svg> 
+                    <div class="absolute inset-0 flex items-center justify-center"> 
+                        <span id="productivity" class="text-xl font-bold">0%</span> 
+                    </div> 
+                </div> 
+            </div> 
+        </div> 
+    </div> 
+
+    <script> 
+        // Stopwatch state variables
+        let workTimeAccumulated = 0; // Total time spent working (milliseconds)
+        let breakTimeAccumulated = 0; // Total time spent on break (milliseconds)
+        let segmentStartTime = 0; // Timestamp (Date.now()) when the current work/break segment began
+        let timerInterval; // Stores the interval ID for update loop
+        let isRunning = false; // True if stopwatch is actively counting work time
+        let isPaused = false; // True if stopwatch is paused and counting break time
+
+        // DOM element references
+        const stopwatchDisplay = document.getElementById('stopwatch'); 
+        const activeTimeDisplay = document.getElementById('activeTime'); 
+        const breakTimeDisplay = document.getElementById('breakTime'); 
+        const totalTimeDisplay = document.getElementById('totalTime'); 
+        const productivityDisplay = document.getElementById('productivity'); 
+        const gaugeProgress = document.getElementById('gaugeProgress'); 
+        const startPauseBtn = document.getElementById('startPauseBtn'); 
+        const resetBtn = document.getElementById('resetBtn'); 
+        const currentBreakTimeDisplay = document.getElementById('currentBreakTimeDisplay');
+        const progressBar = document.getElementById('progressBar'); // New progress bar element
+        const progressBarText = document.getElementById('progressBarText'); // New progress bar text
+
+        /**
+         * Formats milliseconds into HH:MM:SS.T (T = tenths of a second)
+         * Used for the main stopwatch display.
+         * @param {number} ms - Milliseconds to format.
+         * @returns {string} Formatted time string.
+         */
+        function formatTime(ms) { 
+            const hours = Math.floor(ms / 3600000); 
+            const minutes = Math.floor((ms % 3600000) / 60000); 
+            const seconds = Math.floor((ms % 60000) / 1000); 
+            const tenths = Math.floor((ms % 1000) / 100); 
+            return `${hours.toString().padStart(2, '0')}:${minutes.toString().padStart(2, '0')}:${seconds.toString().padStart(2, '0')}.${tenths}`; 
+        } 
+
+        /**
+         * Formats milliseconds into M(minutes) S(seconds)
+         * Used for Active Time, Break Time, and Total Time displays.
+         * @param {number} ms - Milliseconds to format.
+         * @returns {string} Formatted time string.
+         */
+        function formatDuration(ms) { 
+            const minutes = Math.floor(ms / 60000); 
+            const seconds = Math.floor((ms % 60000) / 1000); 
+            return `${minutes}m ${seconds}s`; 
+        } 
+
+        /**
+         * Updates all time displays and productivity percentage/progress bar.
+         * This function is called repeatedly by the timer interval.
+         */
+        function updateDisplays() { 
+            let currentWorkDuration = 0;
+            let currentBreakDuration = 0;
+
+            if (isRunning) {
+                currentWorkDuration = Date.now() - segmentStartTime;
+            } else if (isPaused) {
+                currentBreakDuration = Date.now() - segmentStartTime;
+            }
+
+            const displayWorkTime = workTimeAccumulated + currentWorkDuration;
+            const displayBreakTime = breakTimeAccumulated + currentBreakDuration;
+            const totalTime = displayWorkTime + displayBreakTime;
+
+            // Update main stopwatch display
+            stopwatchDisplay.textContent = formatTime(displayWorkTime);
+
+            // Update productivity section displays
+            activeTimeDisplay.textContent = formatDuration(displayWorkTime); 
+            breakTimeDisplay.textContent = formatDuration(displayBreakTime); 
+            totalTimeDisplay.textContent = formatDuration(totalTime); 
+
+            // Calculate productivity percentage
+            const productivity = totalTime > 0 ? (displayWorkTime / totalTime) * 100 : 0; 
+            
+            // Update circular gauge
+            productivityDisplay.textContent = `${productivity.toFixed(0)}%`; // No decimal for percentage as per image
+            const circumference = 2 * Math.PI * 45; 
+            gaugeProgress.style.strokeDasharray = `${(productivity / 100) * circumference} ${circumference}`; 
+
+            // Update circular gauge color based on productivity
+            productivityDisplay.classList.remove('low', 'medium');
+            if (productivity < 40) {
+                productivityDisplay.classList.add('low');
+            } else if (productivity < 75) {
+                productivityDisplay.classList.add('medium');
+            }
+
+            // Update horizontal progress bar
+            progressBar.style.width = `${productivity}%`;
+            progressBarText.textContent = `${productivity.toFixed(0)}% Productivity`;
+
+            // Update horizontal progress bar color based on productivity
+            progressBar.classList.remove('low', 'medium');
+            if (productivity < 40) {
+                progressBar.classList.add('low');
+            } else if (productivity < 75) {
+                progressBar.classList.add('medium');
+            } else {
+                // Ensure it's the default green if high productivity
+                progressBar.style.backgroundColor = ''; /* Resets to CSS default */
+            }
+
+
+            // Update the small break time display above the button
+            if (isRunning) {
+                currentBreakTimeDisplay.textContent = 'Working...';
+                currentBreakTimeDisplay.classList.remove('on-break');
+                currentBreakTimeDisplay.classList.add('working');
+            } else { // It's either paused (counting break) or just stopped (break time is fixed)
+                currentBreakTimeDisplay.textContent = `Break: ${formatDuration(displayBreakTime)}`;
+                currentBreakTimeDisplay.classList.remove('working');
+                currentBreakTimeDisplay.classList.add('on-break');
+            }
+        } 
+
+        /**
+         * Handles the Start/Pause/Resume logic for the main button.
+         */
+        function startPauseResumeTimer() { 
+            if (isRunning) {
+                // Currently running -> PAUSE action
+                clearInterval(timerInterval); // Stop the current interval
+                workTimeAccumulated += Date.now() - segmentStartTime; // Accumulate current work time
+
+                // Now start tracking break time
+                segmentStartTime = Date.now(); // Reset segment start to track break
+                isPaused = true; // Set state to paused/on break
+                isRunning = false; // Set state to not running work timer
+
+                timerInterval = setInterval(updateDisplays, 100); // Start interval for break time updates
+
+                startPauseBtn.textContent = 'Resume'; // Change button text
+                startPauseBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
+                startPauseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600'); // Change button color to amber
+            } else {
+                // Currently paused or stopped -> START/RESUME action
+                if (isPaused) {
+                    // Resuming from a break, accumulate break time
+                    clearInterval(timerInterval); // Stop break interval
+                    breakTimeAccumulated += Date.now() - segmentStartTime; // Accumulate current break time
+                }
+
+                // Start/Resume work time
+                segmentStartTime = Date.now(); // Reset segment start to track work
+                isRunning = true; // Set state to running work timer
+                isPaused = false; // Not on break
+
+                timerInterval = setInterval(updateDisplays, 100); // Start interval for work time updates
+
+                startPauseBtn.textContent = 'Pause'; // Change button text
+                startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+                startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600'); // Change button color to green
+            }
+            updateDisplays(); // Call immediately to update UI after state change
+        }
+
+        /**
+         * Resets all timers and displays to their initial zero state.
+         */
+        function resetTimer() { 
+            clearInterval(timerInterval); // Stop any active interval
+
+            // Reset all accumulated times and flags
+            workTimeAccumulated = 0;
+            breakTimeAccumulated = 0;
+            segmentStartTime = 0;
+            isRunning = false;
+            isPaused = false;
+            
+            // Reset all display elements to '0'
+            stopwatchDisplay.textContent = '00:00:00.0'; 
+            activeTimeDisplay.textContent = '0m 0s'; 
+            breakTimeDisplay.textContent = '0m 0s'; 
+            totalTimeDisplay.textContent = '0m 0s'; 
+            
+            // Reset productivity displays
+            productivityDisplay.textContent = '0%'; 
+            gaugeProgress.style.strokeDasharray = '0 314'; // Reset circular gauge to empty
+            progressBar.style.width = '0%'; // Reset horizontal bar
+            progressBarText.textContent = '0% Productivity';
+            progressBar.classList.remove('low', 'medium'); // Reset color
+            progressBar.style.backgroundColor = ''; /* Resets to CSS default */
+
+
+            // Reset button states and text
+            startPauseBtn.textContent = 'Start';
+            startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); // Ensure it's green
+            startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            startPauseBtn.disabled = false; 
+            resetBtn.disabled = false; 
+            
+            // Reset the small break time display
+            currentBreakTimeDisplay.textContent = 'Break: 0m 0s';
+            currentBreakTimeDisplay.classList.remove('on-break', 'working');
+            currentBreakTimeDisplay.classList.add('text-gray-400');
+        } 
+
+        // Event Listeners
+        startPauseBtn.addEventListener('click', startPauseResumeTimer); 
+        resetBtn.addEventListener('click', resetTimer); 
+
+        // Keyboard controls 
+        document.addEventListener('keydown', (e) => { 
+            if (e.code === 'Space') { 
+                e.preventDefault(); // Prevent default space bar action (e.g., scrolling)
+                startPauseResumeTimer(); // Trigger combined button logic
+            } else if (e.code === 'KeyR') { 
+                resetTimer(); 
+            }
+            // Removed 'KeyM' for mark as button is removed
+        }); 
+
+        // Initialize the display on load
+        document.addEventListener('DOMContentLoaded', () => {
+            resetTimer(); // Set initial state
+        });
+    </script> 
+</body> 
+</html>
+
