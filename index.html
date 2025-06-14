@@ -98,12 +98,10 @@
         #progressBar.low { background-color: #ef4444; } /* Red for low */
         #progressBar.medium { background-color: #f59e0b; } /* Amber for medium */
 
-        /* Specific styling for the Reset button to decrease its size */
-        #resetBtn {
+        /* Specific styling for the control buttons */
+        .control-button {
             padding: 0.6rem 1.2rem; /* Reduced padding */
             font-size: 0.85rem; /* Smaller font size */
-            /* Tailwind's w-1/2 will still make it take half width,
-               but the internal padding and font will make text smaller */
         }
 
         /* Header text gradient - Still neon blue/cyan */
@@ -117,21 +115,18 @@
 </head> 
 <body class="gradient-bg text-white font-sans min-h-screen flex items-center justify-center"> 
     <div class="container mx-auto p-6 max-w-lg"> 
-        <!-- Stopwatch Section --> 
         <div class="neumorphic rounded-2xl p-8 mb-8"> 
             <h1 class="text-3xl font-extrabold text-center mb-6 header-gradient-text">Stopwatch</h1> 
             <div id="stopwatch" class="text-5xl font-mono text-center mb-6 tracking-tight">00:00:00.0</div> 
             <div class="flex flex-col items-center gap-4 mb-6"> 
-                <!-- Small break time display -->
                 <p id="currentBreakTimeDisplay" class="text-sm text-gray-400">Break: 0m 0s</p>
                 <button id="startPauseBtn" class="neumorphic bg-green-500 hover:bg-green-600 text-white font-bold rounded-full transition large-centered-button">Start</button>
                 <div class="flex justify-center gap-4 w-full"> 
-                    <button id="resetBtn" class="neumorphic bg-red-500 hover:bg-red-600 text-white font-bold rounded-full transition w-1/2">Reset</button>
-                    <!-- Removed Mark button, no replacement -->
+                    <button id="stopBtn" class="neumorphic bg-purple-500 hover:bg-purple-600 text-white font-bold rounded-full transition w-1/2 control-button">Stop</button>
+                    <button id="resetBtn" class="neumorphic bg-red-500 hover:bg-red-600 text-white font-bold rounded-full transition w-1/2 control-button">Reset</button>
                 </div>
             </div>
             
-            <!-- Replaced laps with progress bar -->
             <div id="progressBarContainer" class="w-full bg-gray-800 rounded-full h-6 mb-2 relative overflow-hidden">
                 <div id="progressBar" class="h-full bg-green-500 rounded-full transition-all duration-500 ease-out" style="width:0%;"></div>
                 <span id="progressBarText" class="absolute inset-0 flex items-center justify-center text-xs font-bold">0% Productivity</span>
@@ -140,7 +135,6 @@
 
         </div> 
 
-        <!-- Productivity Calculator Section --> 
         <div class="neumorphic rounded-2xl p-8"> 
             <h2 class="text-2xl font-extrabold text-center mb-6 header-gradient-text">Productivity Tracker</h2> 
             <div class="flex justify-between items-center mb-6"> 
@@ -170,6 +164,7 @@
         let timerInterval; // Stores the interval ID for update loop
         let isRunning = false; // True if stopwatch is actively counting work time
         let isPaused = false; // True if stopwatch is paused and counting break time
+        let isStopped = true; // New state: true if the whole system is stopped
 
         // DOM element references
         const stopwatchDisplay = document.getElementById('stopwatch'); 
@@ -179,10 +174,11 @@
         const productivityDisplay = document.getElementById('productivity'); 
         const gaugeProgress = document.getElementById('gaugeProgress'); 
         const startPauseBtn = document.getElementById('startPauseBtn'); 
+        const stopBtn = document.getElementById('stopBtn'); // New stop button reference
         const resetBtn = document.getElementById('resetBtn'); 
         const currentBreakTimeDisplay = document.getElementById('currentBreakTimeDisplay');
-        const progressBar = document.getElementById('progressBar'); // New progress bar element
-        const progressBarText = document.getElementById('progressBarText'); // New progress bar text
+        const progressBar = document.getElementById('progressBar'); 
+        const progressBarText = document.getElementById('progressBarText'); 
 
         /**
          * Formats milliseconds into HH:MM:SS.T (T = tenths of a second)
@@ -240,7 +236,7 @@
             const productivity = totalTime > 0 ? (displayWorkTime / totalTime) * 100 : 0; 
             
             // Update circular gauge
-            productivityDisplay.textContent = `${productivity.toFixed(0)}%`; // No decimal for percentage as per image
+            productivityDisplay.textContent = `${productivity.toFixed(0)}%`; 
             const circumference = 2 * Math.PI * 45; 
             gaugeProgress.style.strokeDasharray = `${(productivity / 100) * circumference} ${circumference}`; 
 
@@ -263,100 +259,145 @@
             } else if (productivity < 75) {
                 progressBar.classList.add('medium');
             } else {
-                // Ensure it's the default green if high productivity
                 progressBar.style.backgroundColor = ''; /* Resets to CSS default */
             }
-
 
             // Update the small break time display above the button
             if (isRunning) {
                 currentBreakTimeDisplay.textContent = 'Working...';
                 currentBreakTimeDisplay.classList.remove('on-break');
                 currentBreakTimeDisplay.classList.add('working');
-            } else { // It's either paused (counting break) or just stopped (break time is fixed)
+            } else if (isPaused) { 
                 currentBreakTimeDisplay.textContent = `Break: ${formatDuration(displayBreakTime)}`;
                 currentBreakTimeDisplay.classList.remove('working');
                 currentBreakTimeDisplay.classList.add('on-break');
+            } else { // isStopped
+                currentBreakTimeDisplay.textContent = 'Stopped';
+                currentBreakTimeDisplay.classList.remove('on-break', 'working');
+                currentBreakTimeDisplay.classList.add('text-gray-400');
             }
         } 
 
         /**
          * Handles the Start/Pause/Resume logic for the main button.
+         * This function handles toggling between running, paused, and resumed states.
          */
         function startPauseResumeTimer() { 
-            if (isRunning) {
+            if (isStopped) {
+                // If stopped, pressing Start means a fresh start
+                isStopped = false;
+                startPauseBtn.textContent = 'Pause';
+                startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600', 'bg-red-500', 'hover:bg-red-600');
+                startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+                startTimer();
+            } else if (isRunning) {
                 // Currently running -> PAUSE action
-                clearInterval(timerInterval); // Stop the current interval
-                workTimeAccumulated += Date.now() - segmentStartTime; // Accumulate current work time
+                clearInterval(timerInterval); 
+                workTimeAccumulated += Date.now() - segmentStartTime; 
 
-                // Now start tracking break time
-                segmentStartTime = Date.now(); // Reset segment start to track break
-                isPaused = true; // Set state to paused/on break
-                isRunning = false; // Set state to not running work timer
+                segmentStartTime = Date.now(); 
+                isPaused = true; 
+                isRunning = false; 
 
-                timerInterval = setInterval(updateDisplays, 100); // Start interval for break time updates
+                timerInterval = setInterval(updateDisplays, 100); 
 
-                startPauseBtn.textContent = 'Resume'; // Change button text
+                startPauseBtn.textContent = 'Resume'; 
                 startPauseBtn.classList.remove('bg-green-500', 'hover:bg-green-600');
-                startPauseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600'); // Change button color to amber
-            } else {
-                // Currently paused or stopped -> START/RESUME action
-                if (isPaused) {
-                    // Resuming from a break, accumulate break time
-                    clearInterval(timerInterval); // Stop break interval
-                    breakTimeAccumulated += Date.now() - segmentStartTime; // Accumulate current break time
-                }
+                startPauseBtn.classList.add('bg-yellow-500', 'hover:bg-yellow-600'); 
+            } else if (isPaused) {
+                // Currently paused -> RESUME action
+                clearInterval(timerInterval); 
+                breakTimeAccumulated += Date.now() - segmentStartTime; 
 
-                // Start/Resume work time
-                segmentStartTime = Date.now(); // Reset segment start to track work
-                isRunning = true; // Set state to running work timer
-                isPaused = false; // Not on break
+                segmentStartTime = Date.now(); 
+                isRunning = true; 
+                isPaused = false; 
 
-                timerInterval = setInterval(updateDisplays, 100); // Start interval for work time updates
+                timerInterval = setInterval(updateDisplays, 100); 
 
-                startPauseBtn.textContent = 'Pause'; // Change button text
+                startPauseBtn.textContent = 'Pause'; 
                 startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
-                startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600'); // Change button color to green
+                startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600'); 
             }
-            updateDisplays(); // Call immediately to update UI after state change
+            // Enable stop button if timer is running or paused
+            stopBtn.disabled = !(isRunning || isPaused); 
+            updateDisplays(); 
+        }
+
+        /**
+         * Starts the timer from a fresh state or after a Stop.
+         */
+        function startTimer() {
+            segmentStartTime = Date.now();
+            isRunning = true;
+            isPaused = false;
+            isStopped = false;
+            timerInterval = setInterval(updateDisplays, 100);
+            startPauseBtn.textContent = 'Pause';
+            startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+            startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            stopBtn.disabled = false; // Enable stop button when timer starts
+            updateDisplays();
+        }
+
+        /**
+         * Stops the entire timer (work and break).
+         */
+        function stopTimer() {
+            clearInterval(timerInterval);
+
+            // Accumulate current time if running or paused before stopping
+            if (isRunning) {
+                workTimeAccumulated += Date.now() - segmentStartTime;
+            } else if (isPaused) {
+                breakTimeAccumulated += Date.now() - segmentStartTime;
+            }
+            
+            isRunning = false;
+            isPaused = false;
+            isStopped = true;
+            segmentStartTime = 0; // Reset segment start as timer is fully stopped
+
+            startPauseBtn.textContent = 'Start';
+            startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600');
+            startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600');
+            stopBtn.disabled = true; // Disable stop button as it's now stopped
+            startPauseBtn.disabled = false; // Re-enable start/pause button
+            updateDisplays(); // Update displays one last time with final accumulated values
         }
 
         /**
          * Resets all timers and displays to their initial zero state.
          */
         function resetTimer() { 
-            clearInterval(timerInterval); // Stop any active interval
+            clearInterval(timerInterval); 
 
-            // Reset all accumulated times and flags
             workTimeAccumulated = 0;
             breakTimeAccumulated = 0;
             segmentStartTime = 0;
             isRunning = false;
             isPaused = false;
+            isStopped = true; // Ensure it's in a stopped state after reset
             
-            // Reset all display elements to '0'
             stopwatchDisplay.textContent = '00:00:00.0'; 
             activeTimeDisplay.textContent = '0m 0s'; 
             breakTimeDisplay.textContent = '0m 0s'; 
             totalTimeDisplay.textContent = '0m 0s'; 
             
-            // Reset productivity displays
             productivityDisplay.textContent = '0%'; 
-            gaugeProgress.style.strokeDasharray = '0 314'; // Reset circular gauge to empty
-            progressBar.style.width = '0%'; // Reset horizontal bar
+            gaugeProgress.style.strokeDasharray = '0 314'; 
+            progressBar.style.width = '0%'; 
             progressBarText.textContent = '0% Productivity';
-            progressBar.classList.remove('low', 'medium'); // Reset color
-            progressBar.style.backgroundColor = ''; /* Resets to CSS default */
+            progressBar.classList.remove('low', 'medium'); 
+            progressBar.style.backgroundColor = ''; 
 
-
-            // Reset button states and text
             startPauseBtn.textContent = 'Start';
-            startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); // Ensure it's green
+            startPauseBtn.classList.remove('bg-yellow-500', 'hover:bg-yellow-600'); 
             startPauseBtn.classList.add('bg-green-500', 'hover:bg-green-600');
             startPauseBtn.disabled = false; 
+            stopBtn.disabled = true; // Stop button should be disabled after reset
             resetBtn.disabled = false; 
             
-            // Reset the small break time display
             currentBreakTimeDisplay.textContent = 'Break: 0m 0s';
             currentBreakTimeDisplay.classList.remove('on-break', 'working');
             currentBreakTimeDisplay.classList.add('text-gray-400');
@@ -364,24 +405,25 @@
 
         // Event Listeners
         startPauseBtn.addEventListener('click', startPauseResumeTimer); 
+        stopBtn.addEventListener('click', stopTimer); 
         resetBtn.addEventListener('click', resetTimer); 
 
         // Keyboard controls 
         document.addEventListener('keydown', (e) => { 
             if (e.code === 'Space') { 
-                e.preventDefault(); // Prevent default space bar action (e.g., scrolling)
-                startPauseResumeTimer(); // Trigger combined button logic
+                e.preventDefault(); 
+                startPauseResumeTimer(); 
+            } else if (e.code === 'KeyS') { 
+                stopTimer(); 
             } else if (e.code === 'KeyR') { 
                 resetTimer(); 
             }
-            // Removed 'KeyM' for mark as button is removed
         }); 
 
         // Initialize the display on load
         document.addEventListener('DOMContentLoaded', () => {
-            resetTimer(); // Set initial state
+            resetTimer(); 
         });
     </script> 
 </body> 
 </html>
-
